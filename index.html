@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Invoice Generator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #f3f4f6; padding-bottom: 50px; }
+
+        /* PRINT SETTINGS */
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; margin: 0; padding: 0; }
+            .invoice-container { box-shadow: none; max-width: 100%; width: 100%; margin: 0; padding: 20px; }
+            input, textarea { border: none !important; resize: none; padding: 0; background: transparent !important; }
+            input::placeholder { color: transparent; }
+            
+            /* Print Layout Fixes */
+            .meta-row { display: flex !important; justify-content: space-between !important; gap: 20px; }
+            .info-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 40px; }
+            .text-right-print { text-align: right !important; }
+            .overflow-visible-print { overflow: visible !important; }
+            
+            /* Hide modal in print */
+            #itemsModal { display: none !important; }
+        }
+
+        /* Screen Styles */
+        .invoice-container {
+            background: white;
+            min-height: 100vh;
+            margin: 20px auto;
+            padding: 40px;
+            max-width: 900px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        input:focus, textarea:focus { background: #eff6ff; outline: none; border-bottom: 2px solid #2563eb; border-radius: 4px; }
+        
+        /* Delete Button Style */
+        .delete-btn {
+            color: #ef4444;
+            background: #fee2e2;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: none;
+        }
+
+        /* Modal Styles */
+        #itemsModal {
+            display: none;
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 700px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- CONTROL PANEL -->
+    <div class="max-w-4xl mx-auto flex justify-between items-center px-4 mt-6 mb-6 no-print">
+        <button onclick="openModal()" class="flex items-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors">
+            <i data-lucide="settings" class="w-5 h-5"></i>
+            Manage Items
+        </button>
+        
+        <button onclick="window.print()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold shadow transition-colors">
+            <i data-lucide="printer" class="w-5 h-5"></i>
+            Print Invoice
+        </button>
+    </div>
+
+    <!-- INVOICE PAPER -->
+    <div class="invoice-container">
+        
+        <!-- HEADER -->
+        <div class="flex justify-between items-start mb-10 border-b pb-8">
+            <div class="w-1/2">
+                <h1 class="text-4xl font-extrabold text-gray-900 mb-2">INVOICE</h1>
+                <input type="text" value="Medical Services Receipt" class="w-full text-gray-500 text-sm font-medium bg-transparent">
+            </div>
+            <div class="w-1/2 text-right flex flex-col items-end">
+                <input type="text" value="CITY HOSPITAL" class="text-2xl font-bold text-blue-600 text-right w-full uppercase bg-transparent">
+                <textarea class="text-right text-gray-500 w-full resize-none text-sm leading-relaxed bg-transparent" rows="3">123 Health Avenue,
+Wellness City, HC 54321</textarea>
+            </div>
+        </div>
+
+        <!-- PATIENT & DOCTOR (Grid Layout) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 info-grid">
+            <!-- Patient -->
+            <div>
+                <!-- Editable Header: Patient Details -->
+                <input type="text" value="Patient Details" class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider w-full bg-transparent outline-none">
+                
+                <div class="border-l-4 border-blue-600 pl-4 py-1">
+                    <input type="text" value="Apple Song" class="w-full font-bold text-lg text-gray-800 mb-1 bg-transparent">
+                    <input type="text" value="(555) 595-5999" class="w-full text-gray-600 mb-1 bg-transparent">
+                    <textarea class="w-full text-gray-600 resize-none h-16 bg-transparent">11 Rosewood Drive,
+Collingwood, NY 33580</textarea>
+                </div>
+            </div>
+            
+            <!-- Doctor -->
+            <div>
+                <!-- Editable Header: Prescribing Physician -->
+                <input type="text" value="Prescribing Physician" class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider w-full bg-transparent outline-none">
+                
+                <div class="border-l-4 border-gray-300 pl-4 py-1">
+                    <input type="text" value="Dr. Anna Bride" class="w-full font-bold text-lg text-gray-800 mb-1 bg-transparent">
+                    <input type="text" value="(555) 505-5000" class="w-full text-gray-600 mb-1 bg-transparent">
+                    <textarea class="w-full text-gray-600 resize-none h-16 bg-transparent">102 Trope Street,
+New York, NY 45568</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- META DATA (Invoice No, Date) -->
+        <div class="grid grid-cols-2 md:flex justify-between gap-6 bg-gray-50 p-6 rounded-lg mb-10 meta-row">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Invoice No</label>
+                <input type="text" value="#12245" class="font-bold text-gray-900 bg-transparent w-24">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Date Issued</label>
+                <input type="date" value="2023-07-01" class="font-medium text-gray-900 bg-transparent">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Due Date</label>
+                <input type="date" value="2023-07-30" class="font-medium text-gray-900 bg-transparent">
+            </div>
+            <div class="text-left md:text-right text-right-print">
+                <input type="text" value="Amount Due" class="block text-xs font-bold text-gray-400 uppercase mb-1 md:text-right w-full bg-transparent">
+                <div id="top-total" class="font-bold text-xl text-blue-600">$1,902.05</div>
+            </div>
+        </div>
+
+        <!-- ITEMS TABLE -->
+        <div class="mb-8 overflow-x-auto overflow-visible-print">
+            <div class="min-w-[600px] w-full">
+                <!-- Header -->
+                <div class="grid grid-cols-12 gap-4 border-b-2 border-gray-800 pb-3 mb-4 text-xs font-bold uppercase text-gray-500 tracking-wider">
+                    <div class="col-span-4">
+                        <input type="text" value="Service" class="w-full bg-transparent outline-none uppercase font-bold text-gray-500">
+                    </div>
+                    <div class="col-span-4">
+                        <input type="text" value="Description" class="w-full bg-transparent outline-none uppercase font-bold text-gray-500">
+                    </div>
+                    <div class="col-span-1 text-right">
+                        <input type="text" value="Qty" class="w-full text-right bg-transparent outline-none uppercase font-bold text-gray-500">
+                    </div>
+                    <div class="col-span-2 text-right">
+                        <input type="text" value="Price" class="w-full text-right bg-transparent outline-none uppercase font-bold text-gray-500">
+                    </div>
+                    <div class="col-span-1 no-print"></div>
+                </div>
+
+                <!-- Items Container -->
+                <div id="items-list">
+                    <!-- Rows will be populated by JS -->
+                </div>
+            </div>
+
+            <button onclick="addNewRow()" class="mt-4 flex items-center gap-2 text-blue-600 font-bold text-sm hover:text-blue-800 no-print transition-colors">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Line Item
+            </button>
+        </div>
+
+        <!-- TOTALS SECTION -->
+        <div class="flex flex-col items-end border-t pt-6">
+            <div class="w-full md:w-5/12">
+                <div class="flex justify-between mb-2 text-sm text-gray-600">
+                    <span>Subtotal</span>
+                    <span id="sub-total" class="font-mono font-medium">$1,745.00</span>
+                </div>
+                <div class="flex justify-between mb-4 text-sm text-gray-600 items-center">
+                    <div class="flex items-center gap-2">
+                        <span>Tax Rate</span>
+                        <div class="flex items-center bg-gray-100 px-2 rounded no-print">
+                            <input type="number" id="tax-input" value="9" oninput="calc()" class="w-8 text-center bg-transparent text-xs outline-none">
+                            <span class="text-xs">%</span>
+                        </div>
+                        <span class="hidden print:inline text-xs">(9%)</span>
+                    </div>
+                    <span id="tax-val" class="font-mono font-medium">$157.05</span>
+                </div>
+                
+                <div class="flex justify-between border-t border-gray-800 pt-4 items-center">
+                    <input type="text" value="Total Due" class="font-bold text-gray-900 bg-transparent outline-none w-32 border-b border-transparent focus:border-gray-300">
+                    <span id="grand-total" class="text-2xl font-bold text-gray-900">$1,902.05</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="mt-16 text-center border-t border-gray-100 pt-8">
+            <input type="text" value="Hospital Vision: To provide the highest quality healthcare with compassion." class="w-full text-center text-gray-400 text-sm italic bg-transparent">
+        </div>
+
+    </div>
+
+    <!-- MODAL (Manage Items) -->
+    <div id="itemsModal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">Manage Saved Items</h2>
+                <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            
+            <!-- Add Form -->
+            <div class="bg-blue-50 p-4 rounded-lg mb-6 grid grid-cols-12 gap-3 items-end">
+                <div class="col-span-4">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Service</label>
+                    <input type="text" id="newItemName" class="w-full p-2 border border-gray-300 rounded text-sm bg-white" placeholder="e.g. X-Ray">
+                </div>
+                <div class="col-span-4">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
+                    <input type="text" id="newItemDesc" class="w-full p-2 border border-gray-300 rounded text-sm bg-white" placeholder="e.g. Chest Scan">
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Price</label>
+                    <input type="number" id="newItemPrice" class="w-full p-2 border border-gray-300 rounded text-sm bg-white" placeholder="0.00">
+                </div>
+                <div class="col-span-2">
+                    <button onclick="saveNewItem()" class="w-full bg-blue-600 text-white p-2 rounded text-sm font-bold hover:bg-blue-700">Add</button>
+                </div>
+            </div>
+
+            <!-- List -->
+            <div class="overflow-y-auto max-h-64 border border-gray-200 rounded-lg">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-100 text-xs text-gray-500 uppercase">
+                        <tr>
+                            <th class="p-3">Service</th>
+                            <th class="p-3">Description</th>
+                            <th class="p-3">Price</th>
+                            <th class="p-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="savedItemsList" class="divide-y divide-gray-200 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data List for Dropdown -->
+    <datalist id="service-options"></datalist>
+
+    <!-- JAVASCRIPT -->
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // --- Data Management ---
+        let savedItems = [];
+        try {
+            const stored = localStorage.getItem('invoiceItems');
+            if (stored) savedItems = JSON.parse(stored);
+            else savedItems = [
+                { id: 1, name: 'Full Check Up', description: 'Full body check up', price: 745.00 },
+                { id: 2, name: 'Ear & Throat Exam', description: 'Infection check due to inflammation', price: 1000.00 }
+            ];
+        } catch(e) { console.log('Storage access error'); }
+
+        // Initial Load
+        window.onload = function() {
+            updateDatalist();
+            // Default rows only if empty
+            if(document.querySelectorAll('.item-row').length === 0) {
+                 if(savedItems.length >= 2) {
+                    createRow(savedItems[0].name, savedItems[0].description, 1, savedItems[0].price);
+                    createRow(savedItems[1].name, savedItems[1].description, 1, savedItems[1].price);
+                 } else {
+                    createRow('', '', 1, 0);
+                 }
+            }
+        };
+
+        // --- Modal Functions ---
+        function openModal() {
+            renderModalList();
+            document.getElementById('itemsModal').style.display = 'block';
+        }
+        function closeModal() {
+            document.getElementById('itemsModal').style.display = 'none';
+        }
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('itemsModal')) closeModal();
+        }
+
+        function saveNewItem() {
+            const n = document.getElementById('newItemName').value;
+            const d = document.getElementById('newItemDesc').value;
+            const p = document.getElementById('newItemPrice').value;
+            if(n && p) {
+                savedItems.push({id: Date.now(), name: n, description: d, price: parseFloat(p)});
+                try { localStorage.setItem('invoiceItems', JSON.stringify(savedItems)); } catch(e){}
+                updateDatalist(); renderModalList();
+                document.getElementById('newItemName').value='';
+                document.getElementById('newItemDesc').value='';
+                document.getElementById('newItemPrice').value='';
+            }
+        }
+
+        function removeSavedItem(id) {
+            if(confirm("Delete this saved item?")) {
+                savedItems = savedItems.filter(i => i.id !== id);
+                try { localStorage.setItem('invoiceItems', JSON.stringify(savedItems)); } catch(e){}
+                updateDatalist(); renderModalList();
+            }
+        }
+
+        function renderModalList() {
+            const list = document.getElementById('savedItemsList');
+            list.innerHTML = '';
+            savedItems.forEach(i => {
+                list.innerHTML += `
+                    <tr>
+                        <td class="p-3 font-medium">${i.name}</td>
+                        <td class="p-3 text-gray-500">${i.description}</td>
+                        <td class="p-3">$${i.price}</td>
+                        <td class="p-3 text-right">
+                            <button onclick="removeSavedItem(${i.id})" class="text-red-500 hover:text-red-700 font-bold">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function updateDatalist() {
+            const dl = document.getElementById('service-options');
+            dl.innerHTML = '';
+            savedItems.forEach(i => {
+                const op = document.createElement('option');
+                op.value = i.name;
+                dl.appendChild(op);
+            });
+        }
+
+        // --- Invoice Functions ---
+        function addNewRow() {
+            createRow('', '', 1, 0);
+        }
+
+        function createRow(name, desc, qty, price) {
+            const container = document.getElementById('items-list');
+            const div = document.createElement('div');
+            // Using Flex/Grid classes
+            div.className = 'grid grid-cols-12 gap-4 mb-3 items-center item-row border-b border-gray-50 pb-2';
+            div.innerHTML = `
+                <div class="col-span-4">
+                    <input type="text" value="${name}" list="service-options" oninput="handleInput(this)" class="service-input w-full font-bold text-gray-800 bg-transparent placeholder-gray-300" placeholder="Service Name">
+                </div>
+                <div class="col-span-4">
+                    <input type="text" value="${desc}" class="desc-input w-full text-gray-600 text-sm bg-transparent placeholder-gray-300" placeholder="Description">
+                </div>
+                <div class="col-span-1">
+                    <input type="number" value="${qty}" oninput="calc()" class="qty w-full text-right bg-transparent font-mono placeholder-gray-300" placeholder="1">
+                </div>
+                <div class="col-span-2">
+                    <input type="number" value="${price}" oninput="calc()" class="price w-full text-right bg-transparent font-mono placeholder-gray-300" placeholder="0.00">
+                </div>
+                <div class="col-span-1 flex justify-center no-print">
+                    <button onclick="removeRow(this)" class="delete-btn" title="Delete Line">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(div);
+            lucide.createIcons(); // Refresh icons for new row
+            calc();
+        }
+
+        function handleInput(input) {
+            const val = input.value;
+            const item = savedItems.find(i => i.name === val);
+            if(item) {
+                const row = input.closest('.item-row');
+                row.querySelector('.desc-input').value = item.description;
+                row.querySelector('.price').value = item.price;
+                calc();
+            }
+        }
+
+        function removeRow(btn) {
+            if(confirm("Delete this line?")) {
+                btn.closest('.item-row').remove();
+                calc();
+            }
+        }
+
+        function calc() {
+            let sub = 0;
+            document.querySelectorAll('.item-row').forEach(row => {
+                let q = parseFloat(row.querySelector('.qty').value) || 0;
+                let p = parseFloat(row.querySelector('.price').value) || 0;
+                sub += (q * p);
+            });
+
+            let taxRate = parseFloat(document.getElementById('tax-input').value) || 0;
+            let taxAmt = (sub * taxRate) / 100;
+            let total = sub + taxAmt;
+
+            // Format Currency
+            const fmt = (num) => '$' + num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+            document.getElementById('sub-total').innerText = fmt(sub);
+            document.getElementById('tax-val').innerText = fmt(taxAmt);
+            document.getElementById('grand-total').innerText = fmt(total);
+        }
+    </script>
+
+</body>
+</html>

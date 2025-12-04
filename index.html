@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical Invoice Generator</title>
-    <!-- Load html2pdf.js for PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <!-- Load Lucide Icons (Specific UMD build for browser compatibility) -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -267,7 +265,11 @@
         /* Buttons Styling */
         .button-group {
             margin-top: 15px;
-            margin-bottom: 10px; /* Added margin below the button group */
+            margin-bottom: 15px; /* Increased margin to separate from table */
+            padding: 10px; /* ADDED: Padding to highlight the box */
+            border: 1px solid #c2e0ff; /* ADDED: Light blue border */
+            background-color: #e6f7ff; /* ADDED: Light blue background for emphasis */
+            border-radius: 8px; /* ADDED: Rounded corners */
             display: flex;
             gap: 10px;
         }
@@ -447,6 +449,7 @@
             color: #d9534f;
         }
 
+        /* Text area for Notes */
         .notes-box textarea {
             width: 100%;
             min-height: 120px;
@@ -703,13 +706,14 @@
             }
         }
         
-        /* --- PDF Generating Mode Classes (Applied via JS) --- */
+        /* --- PDF Generating Mode Classes (Applied via JS) */
+        /* Note: 'pdf-generating' is now used only for the print preparation process */
         .pdf-generating .items-section {
             overflow: visible !important;
         }
         
         .pdf-generating #items-table {
-            min-width: 100% !important; /* Override 750px limit during PDF generation */
+            min-width: 100% !important; /* Override 750px limit during print preparation */
         }
         
         .pdf-generating ::-webkit-scrollbar {
@@ -833,6 +837,7 @@
                 <div class="detail-box">
                     <div class="header-wrapper">
                         <input type="text" class="editable-header-input" value="Prescribing Physician’s Info" aria-label="Section Header">
+                    </input>
                     </div>
                     <label>Name: <input type="text" id="physician-name" placeholder="Dr. Jane Smith" value="Dr. Jane Smith, MDS"></label>
                     <label>Phone: <input type="text" id="physician-phone" placeholder="(555) 987-6543" value="90000 12345"></label>
@@ -857,12 +862,15 @@
             <section class="items-section">
                 <h2>Services & Items</h2>
                 
-                <!-- Add Item Button -->
-                <div class="button-group pdf-hide">
+                <!-- OLD BUTTON GROUP - NOW REMOVED FROM HERE -->
+                <div class="button-group pdf-hide" style="display: none;">
                     <button type="button" class="btn btn-primary" onclick="addItem()">
                         <i data-lucide="plus-circle" width="16" height="16"></i> Add Service/Item
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="openServiceModal()">
+                    <button type="button" class="btn btn-danger" onclick="clearAllItems()">
+                        <i data-lucide="x" width="16" height="16"></i> Clear All Items
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="openServiceModal()" style="display: none;">
                         <i data-lucide="settings" width="16" height="16"></i> Manage List
                     </button>
                 </div>
@@ -899,7 +907,7 @@
                     <!-- Subtotal -->
                     <div>
                         <input type="text" class="editable-label" value="Subtotal:" aria-label="Subtotal Label">
-                        <span id="subtotal-display">0.00</span>
+                        <span id="subtotal-display">₹0.00</span>
                     </div>
 
                     <!-- Tax Rate Row (RE-ADDED) -->
@@ -913,13 +921,13 @@
                             <span class="pdf-hide">%</span>
                         </div>
                         <!-- Calculated Tax Amount -->
-                        <span id="tax-amount-1" class="tax-amount-display-span">0.00</span>
+                        <span id="tax-amount-1" class="tax-amount-display-span">₹0.00</span>
                     </div>
 
                     <!-- TOTAL -->
                     <div class="total-row">
                         <input type="text" class="editable-label" style="font-weight: 700; color: var(--primary-color);" value="TOTAL DUE:" aria-label="Total Label">
-                        <span id="total-display">0.00</span>
+                        <span id="total-display">₹0.00</span>
                     </div>
                 </div>
             </div>
@@ -937,9 +945,18 @@
             <button type="button" class="btn btn-print" onclick="printInvoice()">
                 <i data-lucide="printer" width="16" height="16"></i> Print Invoice
             </button>
-            <button type="button" class="btn btn-download" onclick="downloadPDF()">
-                <i data-lucide="download" width="16" height="16"></i> Generate & Download PDF
+            
+            <!-- ADD/DELETE LAST ITEM BUTTONS MOVED HERE FOR VISIBILITY -->
+            <button type="button" class="btn btn-primary" onclick="addItem()">
+                <i data-lucide="plus-circle" width="16" height="16"></i> Add Service/Item
             </button>
+            <button type="button" class="btn btn-danger" onclick="deleteLastItem()">
+                <i data-lucide="trash-2" width="16" height="16"></i> Delete Last Item
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="openServiceModal()">
+                <i data-lucide="settings" width="16" height="16"></i> Manage List
+            </button>
+            <!-- END MOVED BUTTONS -->
         </div>
     </main>
 
@@ -973,6 +990,7 @@
             
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="resetServices()">Reset to Defaults</button>
+            </button>
             </div>
         </div>
     </div>
@@ -988,7 +1006,7 @@
         const itemRowsContainer = document.getElementById('item-rows');
         const subtotalDisplay = document.getElementById('subtotal-display');
         
-        // Tax selectors (RE-ADDED)
+        // Tax selectors
         const taxRate1Input = document.getElementById('tax-rate-1');
         const taxAmount1Display = document.getElementById('tax-amount-1');
         const pdfTaxRateDisplay = document.getElementById('pdf-tax-rate-display'); // New element
@@ -1025,33 +1043,16 @@
         // Initial list is a clone of defaults (will be overwritten by storage if present)
         let serviceList = JSON.parse(JSON.stringify(defaultServiceList));
         
-        // Default items use codes now
+        // Default items now includes 3 pre-filled lines
         const defaultItems = [
             { code: 'DEXAM', price: 500.00 },
-            { code: 'XRADI', price: 350.00 }
+            { code: 'XRADI', price: 350.00 },
+            { code: 'CLEAN', price: 1200.00 } // Added third default item
         ];
         
         // Helper to get service object by code
         function getServiceByCode(code) {
             return serviceList.find(s => s.code === code);
-        }
-
-        /**
-         * Generates the HTML options for a select element based on serviceList
-         * UPDATED: Shows Description First, and includes "Add New" option
-         */
-        function getServiceOptionsHtml(selectedCode) {
-            let html = serviceList.map(service => {
-                const label = service.code === 'CUSTOM' 
-                    ? service.description 
-                    : `${service.description} (${service.code})`;
-                
-                return `<option value="${service.code}" ${service.code === selectedCode ? 'selected' : ''}>${label}</option>`;
-            }).join('');
-            
-            // Add option to trigger add new modal
-            html += `<option value="ADD_NEW_SERVICE" class="font-bold text-primary">+ Add New Item...</option>`;
-            return html;
         }
 
         /**
@@ -1068,15 +1069,7 @@
         }
         
         /**
-         * Parses currency string back to number
-         */
-        function parseCurrency(str) {
-            return parseFloat(str.replace(/[^\d.-]/g, '')) || 0;
-        }
-
-        /**
          * Calculates the total summary.
-         * Now includes Tax calculation.
          */
         function calculateTotals() {
             let currentSubtotal = 0;
@@ -1087,7 +1080,7 @@
                 currentSubtotal += price;
             });
             
-            // 2. Calculate Tax (RE-INTRODUCED)
+            // 2. Calculate Tax
             const taxRate1 = parseFloat(taxRate1Input.value) || 0;
             const taxAmount1 = currentSubtotal * (taxRate1 / 100);
             
@@ -1114,90 +1107,45 @@
                 }
                 row.dataset.sno = sNo;
             });
+            
+            // Re-apply zebra striping after re-indexing
+            document.querySelectorAll('#item-rows .item-row').forEach((row, index) => {
+                if (index % 2 === 0) {
+                    row.style.backgroundColor = '#fff'; // Default background for odd rows (0, 2, 4...)
+                } else {
+                    row.style.backgroundColor = '#f9f9f9'; // Zebra striping for even rows (1, 3, 5...)
+                }
+            });
         }
         
         /**
-         * Handles the change event for the service selector.
-         * Updates the price and fills the description field, but allows further editing.
-         * @param {HTMLSelectElement} selectElement - The dropdown element that was changed.
-         */
-        function handleServiceChange(selectElement) {
-            const row = selectElement.closest('.item-row');
-            const priceInput = row.querySelector('.price-input');
-            const customDescriptionInput = row.querySelector('.custom-description');
-            const saveButton = row.querySelector('.btn-save-item');
-            
-            const selectedCode = selectElement.value;
-            
-            // Check for Add New Option
-            if(selectedCode === 'ADD_NEW_SERVICE') {
-                // IMPORTANT: Use custom modal UI instead of standard alert/confirm
-                // alert("Opening Service Manager. Please close and re-select after adding."); 
-                openServiceModal();
-                // Reset to custom for now until they add it
-                selectElement.value = 'CUSTOM';
-                return;
-            }
-            
-            const selectedService = getServiceByCode(selectedCode);
-
-            if (selectedService) {
-                // Update price from service list
-                priceInput.value = selectedService.price.toFixed(2);
-                
-                // If a standard service is selected, fill the input with its description.
-                if (selectedCode !== 'CUSTOM') {
-                    customDescriptionInput.value = selectedService.description;
-                    if(saveButton) saveButton.style.display = 'none'; // Hide save button for known items
-                } else {
-                     if(saveButton) saveButton.style.display = 'inline-flex'; // Show for custom
-                }
-            }
-
-            calculateTotals();
-        }
-
-        /**
          * Creates a new row for the items table and sets up listeners.
-         * @param {number} sNo - The serial number for the item.
-         * @param {string} code - Default service code.
-         * @param {number} price - Default price.
-         * @param {string} customDescription - Initial value for custom description.
-         * @returns {HTMLTableRowElement} The newly created row.
          */
         function createItemRow(sNo, code = 'CUSTOM', price = 0.00, customDescription = '') {
             const newRow = document.createElement('tr');
             newRow.classList.add('item-row');
             newRow.dataset.sno = sNo; 
             
-            // If code is valid and not custom, use its description as default text
+            // 1. Determine initial text and price based on the code provided (using serviceList for lookup)
             const service = getServiceByCode(code);
+            // If a valid service code is provided, use its description. Otherwise, use the custom description.
             const initialText = (service && code !== 'CUSTOM') ? service.description : customDescription;
+            const initialPrice = price || (service ? service.price : 0.00); 
 
-            // Generate options HTML for the select dropdown
-            const optionsHtml = getServiceOptionsHtml(code);
             
-            // Check if save button should be visible
-            const isCustom = code === 'CUSTOM';
-
             newRow.innerHTML = `
                 <td><span class="item-sno">${sNo}.</span></td>
                 <td>
-                    <!-- Dropdown for selecting predefined services (Acts as Quick Fill) -->
-                    <select class="item-input service-selector" style="margin-bottom: 5px;">
-                        ${optionsHtml}
-                    </select>
-                    
+                    <!-- Text input for editable description (Primary entry point now) -->
                     <div style="display: flex; gap: 5px; align-items: center;">
-                        <!-- Text input for editable description (Always visible now) -->
                         <input type="text" class="item-input custom-description" 
                                 value="${initialText}" 
                                 placeholder="Enter description or select service above">
                             
-                        <!-- Save to List Button (Visible only for custom entries) -->
+                        <!-- Save to List Button (Always visible now for manual entry) -->
                         <button type="button" class="btn btn-small btn-success btn-save-item pdf-hide" 
                                 title="Save this description to list"
-                                style="${isCustom ? 'display: inline-flex;' : 'display: none;'}">
+                                style="display: inline-flex;">
                             <i data-lucide="save" width="14" height="14"></i>
                         </button>
                     </div>
@@ -1206,10 +1154,10 @@
                     <span class="pdf-description-text"></span>
                 </td>
                 <td>
-                    <input type="number" step="0.01" min="0" class="item-input price-input" value="${price.toFixed(2)}">
+                    <input type="number" step="0.01" min="0" class="item-input price-input" value="${initialPrice.toFixed(2)}">
                     <span class="pdf-price-text pdf-only-display"></span>
                 </td>
-                <td class="col-actions pdf-hide">
+                <td class="col-actions pdf-hide interactive-action-cell">
                     <button type="button" class="btn btn-danger btn-remove" title="Delete Line Item">
                         <i data-lucide="trash-2" width="16" height="16"></i>
                     </button>
@@ -1220,19 +1168,10 @@
             const priceInput = newRow.querySelector('.price-input');
             priceInput.addEventListener('input', () => calculateTotals());
             
-            const selector = newRow.querySelector('.service-selector');
-            selector.addEventListener('change', (event) => {
-                handleServiceChange(event.target);
-            });
-
             const customDescriptionInput = newRow.querySelector('.custom-description');
             const saveButton = newRow.querySelector('.btn-save-item');
             
             customDescriptionInput.addEventListener('input', () => {
-                // Show save button if user types something
-                if(selector.value === 'CUSTOM') {
-                    saveButton.style.display = 'inline-flex';
-                }
                 calculateTotals();
             });
             
@@ -1255,19 +1194,48 @@
 
         /**
          * Adds a new item row to the table and recalculates totals.
-         * Uses the default 'CUSTOM' code for easy new entry.
          */
         window.addItem = function() {
             const newSNo = document.querySelectorAll('#item-rows .item-row').length + 1; 
             const row = createItemRow(newSNo, 'CUSTOM', 0.00, '');
             itemRowsContainer.appendChild(row);
             
+            // Add brief visual flash to confirm addition
+            row.style.backgroundColor = '#dff0d8';
+            setTimeout(() => {
+                // Remove temporary highlight and re-index to fix zebra striping
+                row.style.backgroundColor = '';
+                reindexItems(); 
+            }, 500);
+
             if(window.lucide) {
                 lucide.createIcons();
             }
             
             calculateTotals();
         }
+        
+        /**
+         * Deletes the last item from the table.
+         */
+        window.deleteLastItem = function() {
+            const rows = document.querySelectorAll('#item-rows .item-row');
+            if (rows.length > 0) {
+                // Delete the last row
+                rows[rows.length - 1].remove();
+                
+                // If the last item was deleted and now the table is empty, add one empty row back.
+                const remainingRows = document.querySelectorAll('#item-rows .item-row');
+                if (remainingRows.length === 0) {
+                    addItem();
+                }
+
+                calculateTotals();
+                reindexItems();
+            }
+        }
+        
+        // clearAllItems function removed as requested.
 
         // --- Service Modal & Storage Logic ---
         
@@ -1292,7 +1260,6 @@
                 serviceList = JSON.parse(JSON.stringify(defaultServiceList)); // Deep copy defaults
                 saveServices();
                 renderServiceList();
-                updateAllDropdowns();
             }
         }
         
@@ -1391,8 +1358,7 @@
             // Re-render modal list
             renderServiceList();
             
-            // Update all existing dropdowns in the invoice
-            updateAllDropdowns();
+            // updateAllDropdowns is no longer needed since dropdowns are gone
         }
         
         window.deleteServiceFromMasterList = function(code) {
@@ -1401,30 +1367,12 @@
                 serviceList = serviceList.filter(s => s.code !== code);
                 saveServices(); // Persist
                 renderServiceList();
-                updateAllDropdowns();
+                // updateAllDropdowns is no longer needed since dropdowns are gone
             }
         }
         
-        function updateAllDropdowns() {
-            const selects = document.querySelectorAll('.service-selector');
-            selects.forEach(select => {
-                const currentValue = select.value;
-                
-                // Generate new options HTML
-                const newHtml = getServiceOptionsHtml(currentValue);
-                select.innerHTML = newHtml;
-                
-                // Try to set value back, if it still exists. If not, default to CUSTOM
-                if(serviceList.find(s => s.code === currentValue)) {
-                    select.value = currentValue;
-                } else {
-                    select.value = 'CUSTOM';
-                }
-                
-                // Trigger change to recalculate totals if needed
-                handleServiceChange(select);
-            });
-        }
+        // This function is obsolete now as dropdowns are removed.
+        // function updateAllDropdowns() { /* ... */ } 
         
         /**
          * Triggers the standard browser print dialog.
@@ -1436,7 +1384,7 @@
         }
 
         /**
-         * Pre-process the DOM for clean PDF output (hides interactive elements and captures input values).
+         * Pre-process the DOM for clean Print output (hides interactive elements and captures input values).
          */
         function prepareInvoiceForPDF() {
             // Add class for CSS overrides
@@ -1444,7 +1392,7 @@
 
             // 1. Capture all input values and set description text/price for PDF
             document.querySelectorAll('.item-row').forEach(row => {
-                const selector = row.querySelector('.service-selector');
+                // const selector = row.querySelector('.service-selector'); // REMOVED
                 const customInput = row.querySelector('.custom-description');
                 const pdfTextSpan = row.querySelector('.pdf-description-text');
                 const priceInput = row.querySelector('.price-input');
@@ -1462,12 +1410,16 @@
                 }
                 
                 // Force the interactive elements to disappear
-                selector.style.display = 'none';
+                // selector.style.display = 'none'; // REMOVED
                 customInput.style.display = 'none';
                 priceInput.style.display = 'none';
                 // Hide save button
                 const saveBtn = row.querySelector('.btn-save-item');
                 if(saveBtn) saveBtn.style.setProperty('display', 'none', 'important');
+
+                // Hide the delete button cell
+                const deleteCell = row.querySelector('.interactive-action-cell');
+                if(deleteCell) deleteCell.style.display = 'none';
                 
                 pdfTextSpan.style.display = 'block';
                 pdfPriceSpan.style.display = 'block';
@@ -1475,7 +1427,7 @@
             
             // 2. Handle general text inputs & Tax inputs
             document.querySelectorAll('.detail-box input, .clinic-header-info input, .invoice-title-input, .footer-input, .editable-tax-label, .editable-label').forEach(input => {
-                // Only set attribute value for inputs/textareas, not spans
+                // Crucially, set the HTML 'value' attribute to match the live DOM value for printing.
                 if (input.tagName === 'INPUT' || input.tagName === 'TEXTAREA') {
                     input.setAttribute('value', input.value); 
                 }
@@ -1501,16 +1453,16 @@
 
             // 4. Hide PDF-exclusive elements
             const actionHeader = document.querySelector('th.col-actions');
-            if(actionHeader) actionHeader.classList.add('pdf-hide');
+            if(actionHeader) actionHeader.style.display = 'none'; // Use inline style to override CSS print rule
             
             // We rely on print media query for final hiding, but hide controls manually too
             document.querySelector('.controls-panel').style.display = 'none';
         }
 
         /**
-         * Restores the invoice to its interactive state after PDF generation.
+         * Restores the invoice to its interactive state after Print output.
          */
-        function restoreInvoiceFromPDF() {
+        window.restoreInvoiceFromPDF = function() {
             // Remove class for CSS overrides
             document.body.classList.remove('pdf-generating');
             
@@ -1519,7 +1471,7 @@
 
             // 1. Show the action column header
             const actionHeader = document.querySelector('th.col-actions');
-            if(actionHeader) actionHeader.classList.remove('pdf-hide');
+            if(actionHeader) actionHeader.style.display = 'table-cell'; // Restore visibility
 
             // Remove 3-column layout force
             document.querySelector('.details-grid').classList.remove('force-row-layout');
@@ -1528,17 +1480,9 @@
             document.querySelectorAll('.pdf-hide').forEach(el => el.style.display = '');
 
             // 3. Clear temporary value attributes
-            document.querySelectorAll('.detail-box input, .clinic-header-info input, .invoice-title-input, .footer-input, .editable-tax-label, .editable-label').forEach(input => {
-                if (input.tagName === 'INPUT') {
-                    input.removeAttribute('value');
-                }
-            });
-            
-            // Restore Tax Rate Input visibility (RE-ADDED)
-            if (taxRate1Input && pdfTaxRateDisplay) {
-                taxRate1Input.style.display = 'block';
-                pdfTaxRateDisplay.style.display = 'none';
-            }
+            // IMPORTANT FIX: Removed the input.removeAttribute('value') loop entirely. 
+            // The live DOM value must be retained for editing, and removing the attribute 
+            // often interfered with the asynchronous print process.
 
             // 4. Restore Notes Textarea visibility
             if (invoiceNotesTextarea && invoiceNotesDisplay) {
@@ -1548,57 +1492,33 @@
             
             // Restore visibility of interactive elements in line items
             document.querySelectorAll('.item-row').forEach(row => {
-                const selector = row.querySelector('.service-selector');
+                // const selector = row.querySelector('.service-selector'); // REMOVED
                 const customInput = row.querySelector('.custom-description');
                 const priceInput = row.querySelector('.price-input');
                 const pdfTextSpan = row.querySelector('.pdf-description-text');
                 const pdfPriceSpan = row.querySelector('.pdf-price-text');
-                
+                const deleteCell = row.querySelector('.interactive-action-cell');
+
                 // Restore interactive elements
-                selector.style.display = 'block';
+                // selector.style.display = 'block'; // REMOVED
                 customInput.style.display = 'block'; // Always block now
                 priceInput.style.display = 'block';
+
+                // Restore the delete button cell
+                if(deleteCell) deleteCell.style.display = 'table-cell';
                 
-                // Restore save button visibility
+                // Restore save button visibility (always show save button now since there's no dropdown control)
                 const saveBtn = row.querySelector('.btn-save-item');
-                if(saveBtn && selector.value === 'CUSTOM') {
+                if(saveBtn) {
                     saveBtn.style.display = 'inline-flex';
                 }
                 
                 // Hide static spans
                 pdfTextSpan.style.display = 'none';
                 pdfPriceSpan.style.display = 'none';
-                
-                // Restore hidden status of pdf-hide elements
-                document.querySelectorAll('.pdf-hide').forEach(el => el.style.display = 'none');
             });
         }
 
-
-        /**
-         * Configures and initiates the PDF download process.
-         */
-        window.downloadPDF = function() {
-            prepareInvoiceForPDF();
-
-            const options = {
-                margin: 0.5,
-                filename: 'medical_invoice_with_tax_INR.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { 
-                    scale: 2, 
-                    logging: false, 
-                    useCORS: true 
-                },
-                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-            };
-
-            html2pdf()
-                .set(options)
-                .from(invoiceContent)
-                .save()
-                .then(restoreInvoiceFromPDF);
-        }
 
         /**
          * Initialization function to set up event listeners and initial state.
@@ -1622,12 +1542,15 @@
             dueDate.setDate(dueDate.getDate() + 30);
             document.getElementById('invoice-due-date').value = dueDate.toISOString().split('T')[0];
 
-            // 1. Populate initial item rows
+            // 1. Populate initial item rows (3 pre-filled items)
             defaultItems.forEach((item, index) => {
                 const row = createItemRow(index + 1, item.code, getServiceByCode(item.code)?.price);
                 itemRowsContainer.appendChild(row);
             });
             
+            // ADD ONE EMPTY ROW FOR USER INPUT (Total 4 visible lines initially)
+            addItem(); 
+
             // Re-render icons for initial rows
             if(window.lucide) {
                 setTimeout(() => lucide.createIcons(), 50);
@@ -1642,7 +1565,7 @@
             }
             
             // 4. Attach input listeners to all general text/date fields
-            document.querySelectorAll('.detail-box input, .notes-box textarea').forEach(input => {
+            document.querySelectorAll('.detail-box input, .clinic-header-info input, .invoice-title-input, .footer-input, .editable-tax-label, .editable-label').forEach(input => {
                 input.addEventListener('input', () => {
                     // Recalculate totals if non-item price changes in case needed (e.g., if total calculations were more complex)
                     // For now, only update the visual 'Amount Due' box, as item price changes already trigger calculateTotals

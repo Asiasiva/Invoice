@@ -1119,6 +1119,59 @@
         }
         
         /**
+         * Generates the HTML options for a select element based on serviceList
+         */
+        function getServiceOptionsHtml(selectedCode) {
+            let html = serviceList.map(service => {
+                const label = service.code === 'CUSTOM' 
+                    ? service.description 
+                    : `${service.description} (${service.code})`;
+                
+                return `<option value="${service.code}" ${service.code === selectedCode ? 'selected' : ''}>${label}</option>`;
+            }).join('');
+            
+            // Add option to trigger add new modal
+            html += `<option value="ADD_NEW_SERVICE" class="font-bold text-primary">+ Add New Item...</option>`;
+            return html;
+        }
+
+        /**
+         * Handles the change event for the service selector.
+         */
+        function handleServiceChange(selectElement) {
+            const row = selectElement.closest('.item-row');
+            const priceInput = row.querySelector('.price-input');
+            const customDescriptionInput = row.querySelector('.custom-description');
+            const saveButton = row.querySelector('.btn-save-item');
+            
+            const selectedCode = selectElement.value;
+            
+            // Check for Add New Option
+            if(selectedCode === 'ADD_NEW_SERVICE') {
+                openServiceModal();
+                selectElement.value = 'CUSTOM';
+                return;
+            }
+            
+            const selectedService = getServiceByCode(selectedCode);
+
+            if (selectedService) {
+                // Update price and description based on selection
+                priceInput.value = selectedService.price.toFixed(2);
+                customDescriptionInput.value = selectedService.description;
+                
+                // Show save button only if it's the CUSTOM entry (allowing it to be saved back)
+                if (selectedCode === 'CUSTOM') {
+                    saveButton.style.display = 'inline-flex';
+                } else {
+                    saveButton.style.display = 'none';
+                }
+            }
+
+            calculateTotals();
+        }
+
+        /**
          * Creates a new row for the items table and sets up listeners.
          */
         function createItemRow(sNo, code = 'CUSTOM', price = 0.00, customDescription = '') {
@@ -1126,31 +1179,35 @@
             newRow.classList.add('item-row');
             newRow.dataset.sno = sNo; 
             
-            // 1. Determine initial text and price based on the code provided (using serviceList for lookup)
             const service = getServiceByCode(code);
-            // If a valid service code is provided, use its description. Otherwise, use the custom description.
             const initialText = (service && code !== 'CUSTOM') ? service.description : customDescription;
             const initialPrice = price || (service ? service.price : 0.00); 
+            const optionsHtml = getServiceOptionsHtml(code);
 
             
             newRow.innerHTML = `
                 <td><span class="item-sno">${sNo}.</span></td>
                 <td>
-                    <!-- Text input for editable description (Primary entry point now) -->
+                    <!-- Dropdown for selecting predefined services -->
+                    <select class="item-input service-selector" style="margin-bottom: 5px;">
+                        ${optionsHtml}
+                    </select>
+                    
+                    <!-- Text input for custom description -->
                     <div style="display: flex; gap: 5px; align-items: center;">
                         <input type="text" class="item-input custom-description" 
                                 value="${initialText}" 
                                 placeholder="Enter description or select service above">
                             
-                        <!-- Save to List Button (Always visible now for manual entry) -->
+                        <!-- Save to List Button -->
                         <button type="button" class="btn btn-small btn-success btn-save-item pdf-hide" 
                                 title="Save this description to list"
-                                style="display: inline-flex;">
+                                style="${code === 'CUSTOM' ? 'display: inline-flex;' : 'display: none;'}">
                             <i data-lucide="save" width="14" height="14"></i>
                         </button>
                     </div>
 
-                    <!-- Span for displaying the final description in PDF/Print mode -->
+                    <!-- Span for displaying the final description in Print mode -->
                     <span class="pdf-description-text"></span>
                 </td>
                 <td>
@@ -1170,8 +1227,16 @@
             
             const customDescriptionInput = newRow.querySelector('.custom-description');
             const saveButton = newRow.querySelector('.btn-save-item');
+            const selector = newRow.querySelector('.service-selector');
+
+            selector.addEventListener('change', (event) => {
+                handleServiceChange(event.target);
+            });
             
             customDescriptionInput.addEventListener('input', () => {
+                // If text is modified, ensure the dropdown is set to CUSTOM and show the save button
+                selector.value = 'CUSTOM';
+                saveButton.style.display = 'inline-flex';
                 calculateTotals();
             });
             
@@ -1203,7 +1268,6 @@
             // Add brief visual flash to confirm addition
             row.style.backgroundColor = '#dff0d8';
             setTimeout(() => {
-                // Remove temporary highlight and re-index to fix zebra striping
                 row.style.backgroundColor = '';
                 reindexItems(); 
             }, 500);
@@ -1235,8 +1299,6 @@
             }
         }
         
-        // clearAllItems function removed as requested.
-
         // --- Service Modal & Storage Logic ---
         
         function loadServices() {
@@ -1260,9 +1322,47 @@
                 serviceList = JSON.parse(JSON.stringify(defaultServiceList)); // Deep copy defaults
                 saveServices();
                 renderServiceList();
+                // We need to re-render rows to get new dropdown options
+                rebuildItemRows();
             }
         }
         
+        /** Rebuilds all existing item rows after the master list changes */
+        function rebuildItemRows() {
+            // Get data from existing rows
+            const currentItemData = [];
+            document.querySelectorAll('#item-rows .item-row').forEach(row => {
+                const descriptionInput = row.querySelector('.custom-description');
+                const priceInput = row.querySelector('.price-input');
+                // Since we removed the dropdown, we only rely on the current descriptive text and price
+                currentItemData.push({
+                    code: 'CUSTOM', // Treat existing entry as custom now
+                    description: descriptionInput.value,
+                    price: parseFloat(priceInput.value) || 0,
+                });
+            });
+
+            // Clear old rows
+            itemRowsContainer.innerHTML = '';
+            
+            // Re-render rows with new dropdown options
+            currentItemData.forEach((item, index) => {
+                const row = createItemRow(index + 1, item.code, item.price, item.description);
+                itemRowsContainer.appendChild(row);
+            });
+
+            // If empty, add a default line
+            if (currentItemData.length === 0) {
+                addItem();
+            }
+
+            reindexItems();
+            calculateTotals();
+            if(window.lucide) {
+                lucide.createIcons();
+            }
+        }
+
         // Updated to accept optional pre-fill data
         window.openServiceModal = function(desc = '', price = '') {
             renderServiceList();
@@ -1319,7 +1419,6 @@
             
             if(!description) {
                 console.error("Please enter a Description.");
-                // Note: using console.error instead of alert due to iframe constraint.
                 return;
             }
             
@@ -1358,7 +1457,8 @@
             // Re-render modal list
             renderServiceList();
             
-            // updateAllDropdowns is no longer needed since dropdowns are gone
+            // Rebuild rows to include new options in dropdowns
+            rebuildItemRows();
         }
         
         window.deleteServiceFromMasterList = function(code) {
@@ -1367,22 +1467,13 @@
                 serviceList = serviceList.filter(s => s.code !== code);
                 saveServices(); // Persist
                 renderServiceList();
-                // updateAllDropdowns is no longer needed since dropdowns are gone
+                
+                // Rebuild rows to remove deleted options from dropdowns
+                rebuildItemRows();
             }
         }
         
-        // This function is obsolete now as dropdowns are removed.
-        // function updateAllDropdowns() { /* ... */ } 
         
-        /**
-         * Triggers the standard browser print dialog.
-         */
-        window.printInvoice = function() {
-            prepareInvoiceForPDF();
-            window.print();
-            restoreInvoiceFromPDF(); 
-        }
-
         /**
          * Pre-process the DOM for clean Print output (hides interactive elements and captures input values).
          */
@@ -1392,13 +1483,13 @@
 
             // 1. Capture all input values and set description text/price for PDF
             document.querySelectorAll('.item-row').forEach(row => {
-                // const selector = row.querySelector('.service-selector'); // REMOVED
+                const selector = row.querySelector('.service-selector');
                 const customInput = row.querySelector('.custom-description');
                 const pdfTextSpan = row.querySelector('.pdf-description-text');
                 const priceInput = row.querySelector('.price-input');
                 const pdfPriceSpan = row.querySelector('.pdf-price-text');
                 
-                // Always use the text input value for PDF, regardless of dropdown state
+                // Capture currently selected/typed description and price
                 const finalDescription = customInput.value;
                 
                 // Set the text content of the dedicated PDF display spans
@@ -1410,7 +1501,7 @@
                 }
                 
                 // Force the interactive elements to disappear
-                // selector.style.display = 'none'; // REMOVED
+                selector.style.display = 'none';
                 customInput.style.display = 'none';
                 priceInput.style.display = 'none';
                 // Hide save button
@@ -1427,13 +1518,13 @@
             
             // 2. Handle general text inputs & Tax inputs
             document.querySelectorAll('.detail-box input, .clinic-header-info input, .invoice-title-input, .footer-input, .editable-tax-label, .editable-label').forEach(input => {
-                // Crucially, set the HTML 'value' attribute to match the live DOM value for printing.
+                // CRITICAL FIX: Set the HTML 'value' attribute to match the live DOM value for printing.
                 if (input.tagName === 'INPUT' || input.tagName === 'TEXTAREA') {
                     input.setAttribute('value', input.value); 
                 }
             });
 
-            // Handle tax rate display (RE-ADDED)
+            // Handle tax rate display
             if (taxRate1Input && pdfTaxRateDisplay) {
                 pdfTaxRateDisplay.textContent = taxRate1Input.value + '%';
                 taxRate1Input.style.display = 'none';
@@ -1451,11 +1542,11 @@
             // Force 3-column layout for details grid during PDF generation
             document.querySelector('.details-grid').classList.add('force-row-layout'); 
 
-            // 4. Hide PDF-exclusive elements
+            // 4. Hide action header
             const actionHeader = document.querySelector('th.col-actions');
-            if(actionHeader) actionHeader.style.display = 'none'; // Use inline style to override CSS print rule
+            if(actionHeader) actionHeader.style.display = 'none'; 
             
-            // We rely on print media query for final hiding, but hide controls manually too
+            // Hide controls panel
             document.querySelector('.controls-panel').style.display = 'none';
         }
 
@@ -1471,7 +1562,7 @@
 
             // 1. Show the action column header
             const actionHeader = document.querySelector('th.col-actions');
-            if(actionHeader) actionHeader.style.display = 'table-cell'; // Restore visibility
+            if(actionHeader) actionHeader.style.display = 'table-cell'; 
 
             // Remove 3-column layout force
             document.querySelector('.details-grid').classList.remove('force-row-layout');
@@ -1479,10 +1570,11 @@
             // 2. Show all 'pdf-hide' elements
             document.querySelectorAll('.pdf-hide').forEach(el => el.style.display = '');
 
-            // 3. Clear temporary value attributes
-            // IMPORTANT FIX: Removed the input.removeAttribute('value') loop entirely. 
-            // The live DOM value must be retained for editing, and removing the attribute 
-            // often interfered with the asynchronous print process.
+            // 3. Restore Tax Rate Input visibility 
+            if (taxRate1Input && pdfTaxRateDisplay) {
+                taxRate1Input.style.display = 'block';
+                pdfTaxRateDisplay.style.display = 'none';
+            }
 
             // 4. Restore Notes Textarea visibility
             if (invoiceNotesTextarea && invoiceNotesDisplay) {
@@ -1492,7 +1584,7 @@
             
             // Restore visibility of interactive elements in line items
             document.querySelectorAll('.item-row').forEach(row => {
-                // const selector = row.querySelector('.service-selector'); // REMOVED
+                const selector = row.querySelector('.service-selector');
                 const customInput = row.querySelector('.custom-description');
                 const priceInput = row.querySelector('.price-input');
                 const pdfTextSpan = row.querySelector('.pdf-description-text');
@@ -1500,17 +1592,19 @@
                 const deleteCell = row.querySelector('.interactive-action-cell');
 
                 // Restore interactive elements
-                // selector.style.display = 'block'; // REMOVED
-                customInput.style.display = 'block'; // Always block now
+                selector.style.display = 'block'; 
+                customInput.style.display = 'block'; 
                 priceInput.style.display = 'block';
 
                 // Restore the delete button cell
                 if(deleteCell) deleteCell.style.display = 'table-cell';
                 
-                // Restore save button visibility (always show save button now since there's no dropdown control)
+                // Restore save button visibility
                 const saveBtn = row.querySelector('.btn-save-item');
                 if(saveBtn) {
-                    saveBtn.style.display = 'inline-flex';
+                    // Check if current selection is CUSTOM to determine if Save should be visible
+                    const isCustom = selector.value === 'CUSTOM' || !selector.value;
+                    saveBtn.style.display = isCustom ? 'inline-flex' : 'none';
                 }
                 
                 // Hide static spans
@@ -1583,3 +1677,4 @@
     </script>
 </body>
 </html>
+
